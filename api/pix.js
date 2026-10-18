@@ -14,6 +14,13 @@ module.exports = async (req, res) => {
     const p = pkg.data();
     const eu = euDoc.data();
     if (p.sellerId !== eu.parentId) throw new Erro('Esse pacote não é do seu fornecedor.', 403);
+    p.price = Math.round(Number(p.price) * 100) / 100;
+    if (!Number.isInteger(p.credits) || p.credits < 1 || !(p.price >= 0.01)) throw new Erro('Pacote inválido. Avise seu fornecedor.');
+
+    // evita encher o Mercado Pago de Pix abertos pelo mesmo comprador
+    const meus = await db.collection('orders').where('buyerId', '==', u.uid).limit(30).get();
+    if (meus.docs.filter(d => d.data().status === 'pending' && d.data().createdAt > Date.now() - 30 * 60e3).length >= 5)
+      throw new Erro('Você já tem vários Pix aguardando pagamento. Pague um deles ou espere expirar.');
 
     const [tk, saldoDoc] = await Promise.all([db.doc('mpTokens/' + p.sellerId).get(), saldoRef(p.sellerId).get()]);
     if (!tk.exists) throw new Erro('Seu fornecedor ainda não ativou o Pix.');
@@ -37,7 +44,11 @@ module.exports = async (req, res) => {
     });
     const j = await r.json();
     const td = j.point_of_interaction && j.point_of_interaction.transaction_data;
-    if (!r.ok || !td) { console.error('MP', r.status, JSON.stringify(j)); throw new Error('mp'); }
+    if (!r.ok || !td) {
+      console.error('MP', r.status, JSON.stringify(j));
+      const motivo = (j && ((j.cause && j.cause[0] && j.cause[0].description) || j.message)) || '';
+      throw new Erro('Não foi possível gerar o Pix' + (motivo ? ': ' + motivo : '.') + ' Confira se a conta Mercado Pago do fornecedor tem chave Pix cadastrada e se o e-mail do comprador é diferente do e-mail dessa conta.', 502);
+    }
 
     await ordem.set({
       buyerId: u.uid, buyerName: eu.name || '', sellerId: p.sellerId, packageId: pkg.id, packageName: p.name,
