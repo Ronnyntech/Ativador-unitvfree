@@ -1,0 +1,45 @@
+const { db, Erro, cors, quem, saldoRef, mp, falha } = require('./_lib');
+
+module.exports = async (req, res) => {
+  if (cors(req, res)) return;
+  try {
+    if (req.method !== 'POST') throw new Erro('Método inválido.', 405);
+    const u = await quem(req);
+    if (u.isOwner) throw new Erro('O dono não compra créditos.');
+    const pkg = await db.doc('packages/' + String((req.body || {}).packageId || '_')).get();
+    if (!pkg.exists || pkg.data().active === false) throw new Erro('Pacote indisponível.');
+    const p = pkg.data();
+    const eu = (await db.doc('resellers/' + u.uid).get()).data();
+    if (p.sellerId !== eu.parentId) throw new Erro('Esse pacote não é do seu fornecedor.', 403);
+
+    const tk = await db.doc('mpTokens/' + p.sellerId).get();
+    if (!tk.exists) throw new Erro('Seu fornecedor ainda não ativou o Pix.');
+    const saldo = (await saldoRef(p.sellerId).get()).data();
+    if (!saldo || Number(saldo.balance || 0) < p.credits) throw new Erro('Pacote indisponível no momento (fornecedor sem créditos).');
+
+    const ordem = db.collection('orders').doc();
+    const base = process.env.SITE_URL || ('https://' + req.headers.host);
+    const r = await mp(tk.data().token, '/v1/payments', {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': ordem.id },
+      body: JSON.stringify({
+        transaction_amount: p.price,
+        description: `${p.name} - ${p.credits} créditos`,
+        payment_method_id: 'pix',
+        payer: { email: u.email },
+        external_reference: ordem.id,
+        notification_url: `${base}/api/webhook?s=${encodeURIComponent(p.sellerId)}`,
+        date_of_expiration: new Date(Date.now() + 30 * 60e3).toISOString().replace('Z', '+00:00')
+      })
+    });
+    const j = await r.json();
+    const td = j.point_of_interaction && j.point_of_interaction.transaction_data;
+    if (!r.ok || !td) { console.error('MP', r.status, JSON.stringify(j)); throw new Error('mp'); }
+
+    await ordem.set({
+      buyerId: u.uid, buyerName: eu.name || '', sellerId: p.sellerId, packageId: pkg.id, packageName: p.name,
+      credits: p.credits, amount: p.price, status: 'pending', paymentId: String(j.id), createdAt: Date.now()
+    });
+    res.json({ orderId: ordem.id, copiaCola: td.qr_code, qrBase64: td.qr_code_base64 });
+  } catch (e) { falha(res, e); }
+};
