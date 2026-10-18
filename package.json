@@ -1,0 +1,1 @@
+{ "name": "painel-pix", "private": true, "dependencies": { "firebase-admin": "^12.6.0" } }
