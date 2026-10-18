@@ -6,15 +6,18 @@ module.exports = async (req, res) => {
     if (req.method !== 'POST') throw new Erro('Método inválido.', 405);
     const u = await quem(req);
     if (u.isOwner) throw new Erro('O dono não compra créditos.');
-    const pkg = await db.doc('packages/' + String((req.body || {}).packageId || '_')).get();
+    const [pkg, euDoc] = await Promise.all([
+      db.doc('packages/' + String((req.body || {}).packageId || '_')).get(),
+      db.doc('resellers/' + u.uid).get()
+    ]);
     if (!pkg.exists || pkg.data().active === false) throw new Erro('Pacote indisponível.');
     const p = pkg.data();
-    const eu = (await db.doc('resellers/' + u.uid).get()).data();
+    const eu = euDoc.data();
     if (p.sellerId !== eu.parentId) throw new Erro('Esse pacote não é do seu fornecedor.', 403);
 
-    const tk = await db.doc('mpTokens/' + p.sellerId).get();
+    const [tk, saldoDoc] = await Promise.all([db.doc('mpTokens/' + p.sellerId).get(), saldoRef(p.sellerId).get()]);
     if (!tk.exists) throw new Erro('Seu fornecedor ainda não ativou o Pix.');
-    const saldo = (await saldoRef(p.sellerId).get()).data();
+    const saldo = saldoDoc.data();
     if (!saldo || Number(saldo.balance || 0) < p.credits) throw new Erro('Pacote indisponível no momento (fornecedor sem créditos).');
 
     const ordem = db.collection('orders').doc();
