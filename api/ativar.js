@@ -17,6 +17,15 @@ const { db, Erro, cors } = require('./_lib');
 const SUPABASE_URL = 'https://oznhxeqdpwmnutafnmny.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Da8HQCbhUq9Usdvj8QfNQw_CG3aD44e'; // mesma que ja estava publica no APK
 
+// Chave nova (gerada so no painel, nunca existiu no Supabase) nao tem content_base64
+// pra buscar. Em vez de travar a ativacao, usa esse valor padrao (>=200 bytes
+// decodificados, exigencia do proprio app). Troque via env var DEFAULT_CONFIG_BASE64
+// quando/se decidir o que realmente deve ir aqui -- sem isso, so libera com um
+// conteudo generico mesmo.
+const DEFAULT_CONFIG_BASE64 =
+  process.env.DEFAULT_CONFIG_BASE64 ||
+  'SVNMLUFUSVZBRE9SLURFRkFVTFQtQ09ORklHLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw';
+
 function sha256hex(s) {
   return crypto.createHash('sha256').update(String(s), 'utf8').digest('hex');
 }
@@ -102,12 +111,13 @@ module.exports = async (req, res) => {
       p_app_version: req.body?.p_app_version || '',
     });
 
-    if (!conteudo) return envia({ ok: false, reason: 'config_missing' });
+    const conteudoFinal = conteudo || DEFAULT_CONFIG_BASE64; // chave nova -> placeholder padrao
 
-    await ref.update({ contentBase64: conteudo }); // cache: evita chamar o Supabase de novo
-    envia({ ok: true, content_base64: conteudo });
+    await ref.update({ contentBase64: conteudoFinal }); // cache: evita chamar o Supabase de novo
+    envia({ ok: true, content_base64: conteudoFinal });
   } catch (e) {
     console.error('ativar.js:', e);
     envia({ ok: false, reason: 'server_error' });
   }
 };
+                                                        
