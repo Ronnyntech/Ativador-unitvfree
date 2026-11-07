@@ -14,8 +14,8 @@
 const crypto = require('crypto');
 const { db, Erro, cors } = require('./_lib');
 
-const SUPABASE_URL = 'https://oznhxeqdpwmnutafnmny.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Da8HQCbhUq9Usdvj8QfNQw_CG3aD44e'; // mesma que ja estava publica no APK
+const SUPABASE_URL = 'https://mutyoiawpbjequhwczkh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_XBp4pukrs433TVozc7ey-g_Qdd42M64'; // mesma que ja estava publica no APK (versao 3.0.30, atualizada)
 
 // Chave nova (gerada so no painel, nunca existiu no Supabase) nao tem content_base64
 // pra buscar. Em vez de travar a ativacao, usa esse valor padrao (>=200 bytes
@@ -120,4 +120,3 @@ module.exports = async (req, res) => {
     envia({ ok: false, reason: 'server_error' });
   }
 };
-                                                        
